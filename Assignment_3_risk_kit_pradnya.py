@@ -194,3 +194,61 @@ def portfolio_vol(weights, cov):
 
 def portfolio_sharpe(portf_return,riskfree_rate,portf_vol):
     return (portf_return-riskfree_rate)/portf_vol
+    
+def cppi(risky_r,safe_r=None,m=3,start=100000,floor=0.85,rfr=0.03,drawdown=None):
+    dates=risky_r.index
+    n_steps=len(dates)
+    account_value=start
+    floor_value=floor*start
+    
+    if isinstance(risky_r,pd.Series):
+        risky_r=pd.DataFrame(risky_r,columns=["R"])
+        
+    if safe_r is None:
+        safe_r=pd.DataFrame().reindex_like(risky_r)
+        safe_r.values[:]=rfr/12
+    
+    account_history=pd.DataFrame().reindex_like(risky_r)
+    floor_history=pd.DataFrame().reindex_like(risky_r)
+    cushion_history=pd.DataFrame().reindex_like(risky_r)
+    risky_w_history=pd.DataFrame().reindex_like(risky_r)
+    peak_history=pd.DataFrame().reindex_like(risky_r)
+    peak=0
+    for step in range(len(dates)):
+        cushion=(account_value-floor_value)/account_value
+        risky_w=m*cushion
+        risky_w=np.minimum(risky_w,1)
+        risky_w=np.maximum(risky_w,0)
+        safe_w=1-risky_w
+        risky_alloc=account_value*risky_w
+        safe_alloc=account_value*safe_w
+        account_value=risky_alloc*(1+risky_r.iloc[step])+safe_alloc*(1+safe_r.iloc[step])
+        if drawdown is not None:
+            peak=np.maximum(peak,account_value)
+            floor_value=peak*(1-drawdown)
+        cushion_history.iloc[step]=cushion
+        risky_w_history.iloc[step]=risky_w
+        account_history.iloc[step]=account_value
+        floor_history.iloc[step]=floor_value
+        peak_history.iloc[step]=peak
+            
+            
+    risky_wealth=start*(1+risky_r).cumprod()
+    
+    
+    
+    backtest={
+        "Wealth":account_history,
+        "Risky Wealth":risky_wealth,
+        "Risk Budget":cushion_history,
+        "Risky Allocation":risky_w_history,
+        "Multiplier":m,
+        "Start":start,
+        "Floor":floor,
+        "Risky Asset Returns":risky_r,
+        "Safe Asset Returns":safe_r,
+        "Peak Value":peak_history,
+        "Drawdown":drawdown,
+        "Floor History":floor_history
+    }
+    return backtest    
